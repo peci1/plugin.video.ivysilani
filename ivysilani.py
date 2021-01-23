@@ -10,6 +10,7 @@ import urllib.request, urllib.parse, urllib.error
 import urllib.request, urllib.error, urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
+import json
 
 from io import StringIO, BytesIO
 import gzip
@@ -200,7 +201,48 @@ class _Playable:
         try:
             if urllib.request.urlopen(url).getcode() == 200:
                 self._links()[quality] = url
-        except urllib.error.HTTPError:
+        except urllib.error.HTTPError as ex:
+            print("Error getting URL '" + url + "': " + str(ex), file=sys.stderr)
+            return self.dashUrl(quality)
+        return url
+
+    def dashUrl(self, quality):
+        url = None
+        params = {"ID": self.ID,
+                  "playerType": "dash",
+                  "quality": quality.quality()}
+        data = None
+        try:
+            data = _fetch(PLAYLISTURL_URL, params)
+        except Exception as ex:
+            print(str(ex), file=sys.stderr)
+            return None
+     
+        root = ET.fromstring(data)
+        if root.tag == "errors":
+            raise Exception(', '.join([e.text for e in root]))
+        playlist_url = root.text
+        resp = urllib.request.urlopen(playlist_url)
+        playlist_data = resp.read()
+        try:
+            root = json.loads(playlist_data)
+        except json.JSONDecodeError as ex:
+            print(str(ex), file=sys.stderr)
+            return None
+
+        if not "playlist" in root or len(root["playlist"]) == 0:
+            return None
+        
+        for video in root["playlist"]:
+            if 'streamUrls' in video and "main" in video["streamUrls"]:
+                url = video["streamUrls"]["main"]
+        if not url:
+            return None
+        try:
+            if urllib.request.urlopen(url).getcode() == 200:
+                self._links()[quality] = url
+        except urllib.error.HTTPError as ex:
+            print("Error getting URL '" + url + "': " + str(ex), file=sys.stderr)
             return None
         return url
 

@@ -18,6 +18,8 @@ import xbmcplugin
 import xbmcvfs
 from xbmcplugin import addDirectoryItem
 
+import inputstreamhelper
+
 import ivysilani
 
 ###############################################################################
@@ -236,6 +238,7 @@ try:
 
     def autoSelectQuality(playable):
         setting_quality = ivysilani.Quality(_quality_)
+        #import web_pdb; web_pdb.set_trace()
         url = playable.url(setting_quality)
         if url or not _quality_fallback_:
             return url
@@ -282,13 +285,28 @@ try:
 
 
     def playUrl(title, url, image, subtitles=False):
-        li = xbmcgui.ListItem(title)
-        li.setArt({'thumb': image})
         res = urllib.request.urlopen(url)
         try:
             url = res.geturl()
         finally:
             res.close()
+        li = xbmcgui.ListItem(title, path=url)
+        li.setArt({'thumb': image})
+        if "playerType=dash" in url:
+            PROTOCOL = 'mpd'
+            DRM = 'com.widevine.alpha'
+            MIME_TYPE = 'application/dash+xml'
+            LICENSE_URL = 'https://ivys-wvproxy.o2tv.cz/license'
+            is_helper = inputstreamhelper.Helper(PROTOCOL, drm=DRM)
+            if is_helper.check_inputstream():
+                li.setContentLookup(False)
+                li.setMimeType(MIME_TYPE)
+                li.setProperty('inputstream', is_helper.inputstream_addon)
+                li.setProperty('inputstream.adaptive.manifest_type', PROTOCOL)
+                li.setProperty('inputstream.adaptive.license_type', DRM)
+                li.setProperty('inputstream.adaptive.license_key', LICENSE_URL + '||R{SSM}|')
+                xbmcplugin.setResolvedUrl(url, True, li)
+
         player = xbmc.Player()
         player.play(url, li)
         if subtitles:
